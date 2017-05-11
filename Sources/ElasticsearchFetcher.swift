@@ -9,66 +9,66 @@
 import Foundation
 import SimpleStateMachine
 
+// MARK: States & Error Enums
+
 public enum ElasticsearchBackgroundFetchState {
     case on, off
 }
 
+public enum ElasticsearchFetcherState<T: Searchable>: SimpleStateMachineState, Equatable {
+    case ready, fetching
+    case partialResultsFetched(ElasticsearchResponse<T>)
+    case done(ElasticsearchResponse<T>)
+    case failure(Error)
+    
+    public func canTransition(from: ElasticsearchFetcherState, to: ElasticsearchFetcherState) -> Bool {
+        switch (from, to) {
+        case (_, .ready):
+            return true
+        case (.ready, .fetching):
+            return true
+        case (.fetching, .partialResultsFetched):
+            return true
+        case (.partialResultsFetched, .fetching):
+            return true
+        case (.fetching, .done):
+            return true
+        case (_, .failure):
+            return true
+        default:
+            return false
+        }
+    }
+    
+    public static func == (left: ElasticsearchFetcherState, right: ElasticsearchFetcherState) -> Bool {
+        switch (left, right) {
+        case (.ready, .ready):
+            return true
+        case (.fetching, .fetching):
+            return true
+        case (.done(_), .done(_)):
+            return true
+        case (.partialResultsFetched(_), .partialResultsFetched(_)):
+            return true
+        case (.failure(_), .failure(_)):
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+public enum ElasticsearchFetcherError: Error {
+    case invalidQuery(errorText: String)
+    case emptyResponse
+    case other
+}
+
 public class ElasticsearchFetcher<T: Searchable>: NSObject, SimpleStateMachineDelegate {
-    
-    // MARK: States & Error Enums
-    
-    public enum ElasticsearchFetcherState: SimpleStateMachineState, Equatable {
-        case ready, fetching
-        case partialResultsFetched(ElasticsearchResponse<T>)
-        case done(ElasticsearchResponse<T>)
-        case failure(Error)
-        
-        public func canTransition(from: StateType, to: StateType) -> Bool {
-            switch (from, to) {
-            case (_, .ready):
-                return true
-            case (.ready, .fetching):
-                return true
-            case (.fetching, .partialResultsFetched):
-                return true
-            case (.partialResultsFetched, .fetching):
-                return true
-            case (.fetching, .done):
-                return true
-            case (_, .failure):
-                return true
-            default:
-                return false
-            }
-        }
-        
-        public static func == (left: ElasticsearchFetcherState, right: ElasticsearchFetcherState) -> Bool {
-            switch (left, right) {
-            case (.ready, .ready):
-                return true
-            case (.fetching, .fetching):
-                return true
-            case (.done(_), .done(_)):
-                return true
-            case (.partialResultsFetched(_), .partialResultsFetched(_)):
-                return true
-            case (.failure(_), .failure(_)):
-                return true
-            default:
-                return false
-            }
-        }
-    }
-    
-    public enum ElasticsearchFetcherError: Error {
-        case invalidQuery(errorText: String)
-        case emptyResponse
-        case other
-    }
     
     // MARK: - SimpleStateMachineDelegate Implementation
     
-    public typealias StateType = ElasticsearchFetcherState
+    public typealias StateType = ElasticsearchFetcherState<T>
     
     public func didTransition(from: StateType, to: StateType) {
         
