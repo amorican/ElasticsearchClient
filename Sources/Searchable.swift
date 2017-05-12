@@ -23,7 +23,7 @@ public protocol Searchable : Glossy {
 
 // MARK: - Fetch & Search Implementations
 
-extension Searchable {
+public extension Searchable {
     
     static public func fetch<T : Searchable>(withId id: Int, completion: ( @escaping (_ fetchedDocument: T?) -> Void)) {
         ElasticsearchCall.fetchDocumentSource(indexName: self.esIndex, typeName: self.esType, id: id) { asyncResult in
@@ -34,12 +34,16 @@ extension Searchable {
                 
             }
             catch {
-                logger.log("\(#function): A failure occured while fetching the document, nil was returned. \(error)")
+                logger.logError("\(type(of:self)) \(#function) id=\(id): A failure occured while fetching the document, nil was returned. \(error)")
                 completion(nil)
             }
             
         }
     }
+    
+}
+
+extension Searchable {
     
     static func fetch<T : Searchable>(withIds ids: [Int]!, completion: ( @escaping (_ fetchedDocuments: [T]?, _ error: Error?) -> Void)) {
         let query = ["query": ["bool": ["must": ["terms": ["id": ids]]]]]

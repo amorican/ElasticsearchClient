@@ -25,6 +25,7 @@
 //
 
 import Foundation
+import Gloss
 
 public enum ElasticsearchCallError: Error {
     case invalidHost(host: URL)

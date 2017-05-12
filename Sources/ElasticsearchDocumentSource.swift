@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Gloss
 
 public struct ElasticsearchDocumentSource : Searchable {
     public static var esIndex = ""

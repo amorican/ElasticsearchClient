@@ -8,6 +8,7 @@
 
 import Foundation
 import SimpleStateMachine
+import Gloss
 
 // MARK: States & Error Enums
 
@@ -149,8 +150,8 @@ public class ElasticsearchFetcher<T: Searchable>: NSObject, SimpleStateMachineDe
     
     public var fetchSize: Int = 100
     public var shouldFetchAll = false
-    fileprivate var fetchedCount: Int = 0
-    fileprivate var queryHitsTotal: Int?
+    public fileprivate(set) var fetchedCount: Int = 0
+    public fileprivate(set) var queryHitsTotal: Int?
     
     public var types = [String]()
     public var indices = [String]()
@@ -165,7 +166,7 @@ public class ElasticsearchFetcher<T: Searchable>: NSObject, SimpleStateMachineDe
     
     // MARK: - Init
     
-    public convenience init(withFilters filters: JSON, resultsFetched: ((_: [T]) -> Void)? = nil) {
+    public convenience init(withFilters filters: JSON, resultsFetched: @escaping ((_: [T]) -> Void)) {
         self.init(withFilters: filters, sortedBy: nil, ascending: true, resultsFetched: resultsFetched)
     }
     
@@ -316,10 +317,10 @@ extension ElasticsearchFetcher {
         do {
             let queryData = try JSONSerialization.data(withJSONObject: query, options: .prettyPrinted)
             let queryString = NSString(data: queryData, encoding: String.Encoding.utf8.rawValue) ?? "null"
-            logger.log("Query: \(queryString)")
+            logger.logQuery("Query: \(queryString)")
         }
         catch {
-            logger.log("Error decoding query for logging: \(error)")
+            logger.logQuery("Error decoding query for logging: \(error)")
         }
     }
 }

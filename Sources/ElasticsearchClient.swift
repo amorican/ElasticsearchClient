@@ -1,8 +1,8 @@
 import Gloss
 
-public typealias JSON = Gloss.JSON
+//public typealias JSON = Gloss.JSON
 
-struct ElasticsearchClient {
+public struct ElasticsearchClient {
     
     internal static var logger = ElasticsearchClientLogger()
 
@@ -12,6 +12,9 @@ struct ElasticsearchClient {
     internal static var awsAccessKey: String?
     internal static var awsSecretKey: String?
 
+    public static var shouldLogQueries = false
+    public static var shouldLogMessages = true
+    
     public static func initialize(withRootURL url: String,
                                   signatureType: ElasticsearchRequestSignatureType = .none,
                                   awsRegion: String? = nil,
@@ -51,8 +54,21 @@ protocol Logger {
 /// ElasticsearchClient Logger.
 struct ElasticsearchClientLogger: Logger {
     
-    public func log(_ message: String) {
+    internal func log(_ message: String) {
+        if !ElasticsearchClient.shouldLogMessages {
+            return
+        }
         print("[ElasticsearchClient] \(message)")
     }
     
+    internal func logError(_ message: String) {
+        print("[ElasticsearchClient] \(message)")
+    }
+    
+    internal func logQuery(_ message: String) {
+        if !(ElasticsearchClient.shouldLogQueries && ElasticsearchClient.shouldLogMessages) {
+            return
+        }
+        print("[ElasticsearchClient] \(message)")
+    }
 }
