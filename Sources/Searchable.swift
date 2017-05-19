@@ -11,22 +11,78 @@ import Gloss
 
 public protocol Searchable : Glossy {
     
-    static var esType: String { get }
-    static var esIndex: String { get }
-    static var excludedFieldsInDefaultSearch: [String]? { get }
-    static var sortFieldNamesMap: [String: String]? { get }
-    static func buildQuery(from json: JSON) -> JSON
+    /// Elasticsearch Type name
+    static var typeName: String { get }
     
+    //TODO
+    /// Currently unused (TODO)
+    static var excludedFieldsInDefaultSearch: [String]? { get }
+    
+    /**
+     Index of field names to provide the matching field name to use in a sort. For example, you may want
+     to set your sort on the field `name`, but the Elasticsearch mapping of your type should use 
+     `name.lowercase` you would then need to add to the map `["name": "name.lowercase"]`.
+     You only need to define key-values for fields that use a different field from the mapping for sorting.
+     */
+    static var sortFieldNamesMap: [String: String]? { get }
+    
+    /**
+     Build an Elasticsearch query from an object. Typically the object would be list of
+     key-values that the method converts into a json elasticsearch query.
+     - Remark: Ideally we would define an associatedtype for the filtersObject type, but this would make the protocol
+     Searchable usable only as a constraint.
+     - Parameter filtersObject: An object of type `Any` that your implementation must be handle to convert.
+     - Returns: A JSON elasticsearch query
+     */
+    static func buildQuery(from filtersObject: Any) -> JSON
+    
+    /**
+     Unique identifier of the document. All elasticsearch documents have an id property.
+     - Remark: Currently defined as an Int?, we may want to make this a String so the module can support string id's.
+     */
     var id : Int? { get }
+    
+    /**
+     The original elasticsearch json document
+     */
     var json : JSON? { get }
+}
+
+// MARK: - Sort
+
+public extension Searchable {
+
+    /**
+     Build an Elasticsearch sort clause which is used along with the query in the `POST` JSON
+     object in an `ElasticsearchCall`.
+     - Parameter fieldName: The field name on which the sort must apply. You do not need to pass
+     an analyzed field name from your Elasticsearch mapping if it's been set up in `sortFieldNamesMap`
+     - Returns: A JSON elasticsearch sort info
+     */
+    static func sortClause(withFieldName fieldName: String, ascending: Bool = true) -> JSON {
+        var sortFieldName = fieldName;
+        if let mappedFieldName = self.sortFieldNamesMap?[fieldName] {
+            sortFieldName = mappedFieldName
+        }
+        return [sortFieldName: ascending ? "asc" : "desc"]
+    }
+    
+    static func getSortByScoreClause() -> JSON? {
+        return ["sort": ["_score"]]
+    }
 }
 
 // MARK: - Fetch & Search Implementations
 
 public extension Searchable {
     
-    static public func fetch<T : Searchable>(withId id: Int, completion: ( @escaping (_ fetchedDocument: T?) -> Void)) {
-        ElasticsearchCall.fetchDocumentSource(indexName: self.esIndex, typeName: self.esType, id: id) { asyncResult in
+    /**
+     Fetch a Searchable by id. Nil will be returned if the Elasticsearch document doesn't exist, or
+     if an error occurred.
+     If you need to catch an exception, see `ElasticsearchFetcher`.
+     */
+    public static func fetch<T : Searchable>(withId id: Int, completion: ( @escaping (_ fetchedDocument: T?) -> Void)) {
+        ElasticsearchCall.fetchDocumentSource(typeName: self.typeName, id: id) { asyncResult in
             do {
                 let json = try asyncResult.resolve()
                 let documentSource = T(json: json)
@@ -40,16 +96,11 @@ public extension Searchable {
             
         }
     }
-    
-}
 
-extension Searchable {
-    
-    static func fetch<T : Searchable>(withIds ids: [Int]!, completion: ( @escaping (_ fetchedDocuments: [T]?, _ error: Error?) -> Void)) {
+    public static func fetch<T : Searchable>(withIds ids: [Int]!, completion: ( @escaping (_ fetchedDocuments: [T]?, _ error: Error?) -> Void)) {
         let query = ["query": ["bool": ["must": ["terms": ["id": ids]]]]]
         
         self.search(withQuery: query) { (asyncHits: AsyncResult<ElasticsearchHits<T>?>) in
-            
             do {
                 let hits = try asyncHits.resolve()?.hits
                 completion(hits?.flatMap({ $0.esSource }), nil)
@@ -59,16 +110,36 @@ extension Searchable {
             }
         }
     }
+
+    public static func search<T : Searchable>(withQuery query: JSON?, completion: ( @escaping (_ fetchedDocuments: [T]?) -> Void)) {
+        
+        self.search(withQuery: query) { (asyncHits: AsyncResult<ElasticsearchHits<T>?>) in
+            do {
+                let response = try asyncHits.resolve()
+                let documents = response?.hits?.flatMap() { $0.esSource }
+                completion(documents)
+            }
+            catch {
+                logger.logError("\(type(of:self)) \(#function): A failure occured while searching, nil was returned. \(error)")
+                completion(nil)
+            }
+        }
+    }
+    
+}
+
+extension Searchable {
     
     static func search<T : Searchable>(withQuery query: JSON?, completion: ( @escaping (_ asyncHits: AsyncResult<ElasticsearchHits<T>?>) -> Void)) {
-        if T.esType.isEmpty || T.esIndex.isEmpty {
+        let indexName = ElasticsearchClient.indexName(forTypeName: T.typeName)
+        if T.typeName.isEmpty || indexName.isEmpty {
             completion(AsyncResult {
                 throw ElasticsearchCallError.indexOrTypeMissing
             })
             return
         }
         
-        self.search(withQuery: query, indexName: T.esIndex, typeName: T.esType) { (asyncSearchResults: AsyncResult<ElasticsearchResponse<T>>) in
+        self.search(withQuery: query, indexName: indexName, typeName: T.typeName) { (asyncSearchResults: AsyncResult<ElasticsearchResponse<T>>) in
             
             let hits: AsyncResult<ElasticsearchHits<T>?> = asyncSearchResults.flatMap(self.toHits)
             completion(hits)
@@ -82,6 +153,8 @@ extension Searchable {
         }
     }
     
+    // MARK: Results Helpers
+    
     static func toSearchResults<T: Searchable>(json: JSON) -> AsyncResult<ElasticsearchResponse<T>> {
         return AsyncResult {
             try self.createSearchResults(fromJSON: json)
@@ -93,8 +166,6 @@ extension Searchable {
             return searchResults.hits
         }
     }
-    
-    //TODO: Refactor this somewhere else
     
     static func createSearchResults<T: Searchable>(fromJSON json: JSON) throws -> ElasticsearchResponse<T> {
         guard let searchResults = ElasticsearchResponse<T>(json: json) else {
@@ -117,7 +188,7 @@ extension Searchable {
 extension Searchable {
     
     static func update(documentId: Int, fields: JSON, completion: ( () -> Void)?) {
-        ElasticsearchCall.update(indexName: self.esIndex, typeName: self.esType, documentId: documentId, fields: fields) { asyncResult in completion?() }
+        ElasticsearchCall.update(typeName: self.typeName, documentId: documentId, fields: fields) { asyncResult in completion?() }
         
     }
     
@@ -132,9 +203,8 @@ extension Searchable {
             return
         }
         
-        let typeName = type(of: self).esType
-        let indexName = type(of: self).esIndex
-        ElasticsearchCall.update(indexName: indexName, typeName: typeName, documentId: id, fields: fields) { asyncResult in completion() }
+        let typeName = type(of: self).typeName
+        ElasticsearchCall.update(typeName: typeName, documentId: id, fields: fields) { asyncResult in completion() }
     }
     
 }

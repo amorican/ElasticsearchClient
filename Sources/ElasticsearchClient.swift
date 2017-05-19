@@ -1,6 +1,9 @@
 import Gloss
 
-//public typealias JSON = Gloss.JSON
+
+public enum ElasticsearchRequestSignatureType {
+    case none, awsV4
+}
 
 public struct ElasticsearchClient {
     
@@ -26,10 +29,42 @@ public struct ElasticsearchClient {
         self.awsAccessKey = awsAccessKey
         self.awsSecretKey = awsSecretKey
     }
+    
+    public static var indexNameForTypeName: ((_ indexName: String) -> String)?
 }
 
-public enum ElasticsearchRequestSignatureType {
-    case none, awsV4
+extension ElasticsearchClient {
+    internal static func indexName(forTypeName typeName: String) -> String {
+        guard let closure = self.indexNameForTypeName else {
+            return typeName
+        }
+        return closure(typeName)
+    }
+
+    static public func termsConditionSplitInSetsOf1024<T>(forFieldName fieldName: String, withValues values: [T]) -> JSON {
+        var valueSets = [[T]]()
+        var valueSet = [T]()
+        for (index, value) in values.enumerated() {
+            if index != 0 && index%1024 == 0 {
+                valueSets.append(valueSet)
+                valueSet = [T]()
+            }
+            valueSet.append(value)
+        }
+        if valueSet.count > 0 {
+            valueSets.append(valueSet)
+        }
+        
+        
+        var includeConditions = [JSON]()
+        
+        for values in valueSets {
+            let includeCondition = ["terms": [fieldName: values]]
+            includeConditions.append(includeCondition)
+            
+        }
+        return ["bool": ["should": includeConditions]]
+    }
 }
 
 
@@ -54,21 +89,23 @@ protocol Logger {
 /// ElasticsearchClient Logger.
 struct ElasticsearchClientLogger: Logger {
     
+    let prefix = "[ElasticsearchClient]"
+    
     internal func log(_ message: String) {
         if !ElasticsearchClient.shouldLogMessages {
             return
         }
-        print("[ElasticsearchClient] \(message)")
+        print("\(prefix) \(message)")
     }
     
     internal func logError(_ message: String) {
-        print("[ElasticsearchClient] \(message)")
+        print("\(prefix) \(message)")
     }
     
     internal func logQuery(_ message: String) {
         if !(ElasticsearchClient.shouldLogQueries && ElasticsearchClient.shouldLogMessages) {
             return
         }
-        print("[ElasticsearchClient] \(message)")
+        print("\(prefix) \(message)")
     }
 }

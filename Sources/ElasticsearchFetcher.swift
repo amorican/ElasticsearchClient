@@ -12,7 +12,7 @@ import Gloss
 
 // MARK: States & Error Enums
 
-public enum ElasticsearchBackgroundFetchState {
+public enum ElasticsearchBackgroundWorkerState {
     case on, off
 }
 
@@ -77,9 +77,9 @@ public class ElasticsearchFetcher<T: Searchable>: NSObject, SimpleStateMachineDe
         
         switch (from, to) {
         case (_, .fetching):
-            self.didChangeBackgroundFetchState?(.on)
+            self.didChangeBackgroundWorkerState?(.on)
         case (.fetching, _):
-            self.didChangeBackgroundFetchState?(.off)
+            self.didChangeBackgroundWorkerState?(.off)
         default:
             break
         }
@@ -162,18 +162,18 @@ public class ElasticsearchFetcher<T: Searchable>: NSObject, SimpleStateMachineDe
     
     public var didFetchDocumentsClosure: ((_: [T]) -> Void)?
     public var didFailClosure: ((_: Error) -> Void)?
-    public var didChangeBackgroundFetchState: ((_: ElasticsearchBackgroundFetchState) -> Void)?
+    public var didChangeBackgroundWorkerState: ((_: ElasticsearchBackgroundWorkerState) -> Void)?
     
     // MARK: - Init
     
     public convenience init(withFilters filters: JSON, resultsFetched: @escaping ((_: [T]) -> Void)) {
-        self.init(withFilters: filters, sortedBy: nil, ascending: true, resultsFetched: resultsFetched)
+        self.init(withFilters: filters, sortedBy: nil, sortAscending: true, resultsFetched: resultsFetched)
     }
     
-    public init(withFilters filters: JSON, sortedBy sortFieldName: String? = nil, ascending: Bool = true, resultsFetched: ((_: [T]) -> Void)? = nil) {
+    public init(withFilters filters: Any, sortedBy sortFieldName: String? = nil, sortAscending: Bool = true, resultsFetched: ((_: [T]) -> Void)? = nil) {
         self.query = T.buildQuery(from: filters)
         if let sortFieldName = sortFieldName {
-            let sortClause = T.sortClause(withFieldName: sortFieldName, ascending: ascending)
+            let sortClause = T.sortClause(withFieldName: sortFieldName, ascending: sortAscending)
             self.query["sort"] = [sortClause]
         }
         
@@ -297,10 +297,15 @@ extension ElasticsearchFetcher {
         var indices = self.indices
         var types = self.types
         if indices.count == 0 {
-            indices.append(T.esIndex)
+            
+            for typeName in types {
+                indices.append(ElasticsearchClient.indexName(forTypeName: typeName))
+            }
+            indices.append(ElasticsearchClient.indexName(forTypeName: T.typeName))
+            
         }
         if types.count == 0 {
-            types.append(T.esType)
+            types.append(T.typeName)
         }
         let queryIndexName = indices.joined(separator: ",")
         let queryTypeName = types.joined(separator: ",")
