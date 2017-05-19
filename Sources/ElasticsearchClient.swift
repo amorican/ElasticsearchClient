@@ -1,8 +1,11 @@
 import Gloss
 
-public typealias JSON = Gloss.JSON
 
-struct ElasticsearchClient {
+public enum ElasticsearchRequestSignatureType {
+    case none, awsV4
+}
+
+public struct ElasticsearchClient {
     
     internal static var logger = ElasticsearchClientLogger()
 
@@ -12,6 +15,9 @@ struct ElasticsearchClient {
     internal static var awsAccessKey: String?
     internal static var awsSecretKey: String?
 
+    public static var shouldLogQueries = false
+    public static var shouldLogMessages = true
+    
     public static func initialize(withRootURL url: String,
                                   signatureType: ElasticsearchRequestSignatureType = .none,
                                   awsRegion: String? = nil,
@@ -23,10 +29,42 @@ struct ElasticsearchClient {
         self.awsAccessKey = awsAccessKey
         self.awsSecretKey = awsSecretKey
     }
+    
+    public static var indexNameForTypeName: ((_ indexName: String) -> String)?
 }
 
-public enum ElasticsearchRequestSignatureType {
-    case none, awsV4
+extension ElasticsearchClient {
+    internal static func indexName(forTypeName typeName: String) -> String {
+        guard let closure = self.indexNameForTypeName else {
+            return typeName
+        }
+        return closure(typeName)
+    }
+
+    static public func termsConditionSplitInSetsOf1024<T>(forFieldName fieldName: String, withValues values: [T]) -> JSON {
+        var valueSets = [[T]]()
+        var valueSet = [T]()
+        for (index, value) in values.enumerated() {
+            if index != 0 && index%1024 == 0 {
+                valueSets.append(valueSet)
+                valueSet = [T]()
+            }
+            valueSet.append(value)
+        }
+        if valueSet.count > 0 {
+            valueSets.append(valueSet)
+        }
+        
+        
+        var includeConditions = [JSON]()
+        
+        for values in valueSets {
+            let includeCondition = ["terms": [fieldName: values]]
+            includeConditions.append(includeCondition)
+            
+        }
+        return ["bool": ["should": includeConditions]]
+    }
 }
 
 
@@ -51,8 +89,23 @@ protocol Logger {
 /// ElasticsearchClient Logger.
 struct ElasticsearchClientLogger: Logger {
     
-    public func log(_ message: String) {
-        print("[ElasticsearchClient] \(message)")
+    let prefix = "[ElasticsearchClient]"
+    
+    internal func log(_ message: String) {
+        if !ElasticsearchClient.shouldLogMessages {
+            return
+        }
+        print("\(prefix) \(message)")
     }
     
+    internal func logError(_ message: String) {
+        print("\(prefix) \(message)")
+    }
+    
+    internal func logQuery(_ message: String) {
+        if !(ElasticsearchClient.shouldLogQueries && ElasticsearchClient.shouldLogMessages) {
+            return
+        }
+        print("\(prefix) \(message)")
+    }
 }

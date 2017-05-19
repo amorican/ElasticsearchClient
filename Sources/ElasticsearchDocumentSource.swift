@@ -7,10 +7,12 @@
 //
 
 import Foundation
+import Gloss
+
 
 public struct ElasticsearchDocumentSource : Searchable {
-    public static var esIndex = ""
-    public static var esType = ""
+    
+    public static var typeName = ""
     public static var excludedFieldsInDefaultSearch : [String]?
     
     
@@ -47,7 +49,7 @@ extension ElasticsearchDocumentSource {
         }
     }
     
-    public static func buildQuery(from json: JSON) -> JSON {
-        return json
+    public static func buildQuery(from filtersObject: Any) -> JSON {
+        return filtersObject as? JSON ?? JSON()
     }
 }

@@ -25,6 +25,7 @@
 //
 
 import Foundation
+import Gloss
 
 public enum ElasticsearchCallError: Error {
     case invalidHost(host: URL)
@@ -42,29 +43,29 @@ class ElasticsearchCall: NSObject {
     
     // MARK: - Fetching Documents
     
-    static func fetchDocumentSource (indexName: String, typeName: String, id: Int, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
-        var suffix = self.suffix(withIndexName: indexName, typeName: typeName, id: id)
+    static func fetchDocumentSource(typeName: String, id: Int, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
+        var suffix = self.suffix(withTypeName: typeName, id: id)
         suffix = suffix.appending("/_source")
         
         self.sendElasticSearchRequest(suffix: suffix, completion: completion)
     }
     
-    static func fetchDocumentHeader (indexName: String, typeName: String, id: Int, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
-        let suffix = self.suffix(withIndexName: indexName, typeName: typeName, id: id)
+    static func fetchDocumentHeader (typeName: String, id: Int, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
+        let suffix = self.suffix(withTypeName: typeName, id: id)
         
         self.sendElasticSearchRequest(suffix: suffix, completion: completion)
     }
     
     static func search (indexName: String, typeName: String, query: JSON?, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
-        var suffix = self.suffix(withIndexName: indexName, typeName: typeName)
+        var suffix = self.suffix(withTypeName: typeName)
         suffix = suffix.appending("/_search")
         self.sendElasticSearchRequest(suffix: suffix, postJSON: query, completion: completion)
     }
     
     // MARK: - Updating Documents
     
-    static func update (indexName: String, typeName: String, documentId: Int, fields: JSON!, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
-        var suffix = self.suffix(withIndexName: indexName, typeName: typeName)
+    static func update (typeName: String, documentId: Int, fields: JSON!, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
+        var suffix = self.suffix(withTypeName: typeName)
         suffix = suffix.appending("/\(documentId)")
         suffix = suffix.appending("/_update")
         let updatePost: JSON = ["doc": fields]
@@ -76,6 +77,11 @@ class ElasticsearchCall: NSObject {
 // MARK: - Building the Request
 
 extension ElasticsearchCall {
+    
+    fileprivate static func suffix(withTypeName typeName: String, id: Int? = nil) -> String {
+        let indexName = ElasticsearchClient.indexName(forTypeName: typeName)
+        return self.suffix(withIndexName: indexName, typeName: typeName, id: id)
+    }
     
     fileprivate static func suffix(withIndexName indexName: String, typeName: String, id: Int? = nil) -> String {
         var suffix = "/".appending(indexName).appending("/").appending(typeName)
