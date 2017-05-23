@@ -39,25 +39,25 @@ public enum ElasticsearchCallError: Error {
     case invalidQuery(httpStatus: Int, type: String, reason: String, index: String, resourceId: String, resourceType: String)
 }
 
-class ElasticsearchCall: NSObject {
+public class ElasticsearchCall {
     
     // MARK: - Fetching Documents
     
-    static func fetchDocumentSource(typeName: String, id: Int, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
+    public static func fetchDocumentSource(typeName: String, id: Int, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
         var suffix = self.suffix(withTypeName: typeName, id: id)
         suffix = suffix.appending("/_source")
         
         self.sendElasticSearchRequest(suffix: suffix, completion: completion)
     }
     
-    static func fetchDocumentHeader (typeName: String, id: Int, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
+    public static func fetchDocumentHeader (typeName: String, id: Int, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
         let suffix = self.suffix(withTypeName: typeName, id: id)
         
         self.sendElasticSearchRequest(suffix: suffix, completion: completion)
     }
     
-    static func search (indexName: String, typeName: String, query: JSON?, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
-        var suffix = self.suffix(withTypeName: typeName)
+    public static func search (indexName: String, typeName: String, query: JSON?, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
+        var suffix = self.suffix(withIndexName: indexName, typeName: typeName)
         suffix = suffix.appending("/_search")
         self.sendElasticSearchRequest(suffix: suffix, postJSON: query, completion: completion)
     }
