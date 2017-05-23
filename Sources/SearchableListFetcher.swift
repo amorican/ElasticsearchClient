@@ -152,30 +152,30 @@ public class SearchableListFetcher<T: SearchableList, U: Searchable> {
 
 // MARK: - SimpleStateMachineDelegate Implementation
 
-extension SearchableListFetcher: SimpleStateMachineDelegate {
+public enum SearchableListFetcherState: SimpleStateMachineState, Equatable {
+    case ready, fetching, standby, done
     
-    public enum SearchableListFetcherState: SimpleStateMachineState, Equatable {
-        case ready, fetching, standby, done
-        
-        public func canTransition(from: StateType, to: StateType) -> Bool {
-            switch (from, to) {
-            case (_, .ready):
-                return true
-            case (.ready, .fetching):
-                return true
-            case (.fetching, .standby):
-                return true
-            case (.standby, .fetching):
-                return true
-            case (.fetching, .done):
-                return true
-            case (.standby, .done):
-                return true
-            default:
-                return false
-            }
+    public func canTransition(from: SearchableListFetcherState, to: SearchableListFetcherState) -> Bool {
+        switch (from, to) {
+        case (_, .ready):
+            return true
+        case (.ready, .fetching):
+            return true
+        case (.fetching, .standby):
+            return true
+        case (.standby, .fetching):
+            return true
+        case (.fetching, .done):
+            return true
+        case (.standby, .done):
+            return true
+        default:
+            return false
         }
     }
+}
+
+extension SearchableListFetcher: SimpleStateMachineDelegate {
     
     public typealias StateType = SearchableListFetcherState
     

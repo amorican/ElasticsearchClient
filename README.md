@@ -8,7 +8,7 @@ The package offers a set of API's to make searching in Elasticsearch easier. It 
 Say I have a Swift type OfficialPublication, corresponding to an indexed type in Elasticsearch:
 ```swift
 let fetcher = ElasticsearchFetcher<OfficialPublication>(withFilters: OfficialPublication.query(forSearchText: "quantum entanglement")
-fetcher.didFetchDocuments = { officialDocuments in
+fetcher.didFetchDocuments = { officialPublications in
 
 }
 fetcher.run()
