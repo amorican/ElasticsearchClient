@@ -78,9 +78,85 @@ ElasticsearchCall.search(indexName: "index_name", typeName: "typeName", query: q
     }
 }
 ```
+### The `Searchable` Protocol
+Define a Swift type which maps to your Elasticsearch type as such:
+```swift
+import ElasticsearchClient
+import Gloss
 
+struct OfficialPublication : Searchable {
 
+    // MARK: - Searchable Implementation
+    
+    public static var typeName = "officialPublications"
+    public static var sortFieldNamesMap: [String: String]? = ["name": "name.raw_lowercase"]
+    static var excludedFieldsInDefaultSearch : [String]?
+    var json : JSON?
+    var id : Int?
 
+    // MARK: - Model Properties
+    
+    var name: String?
+    var text: String?
+    var publicationDate: Date?
+    var authorName: String?
+    var authorId: Int?
+
+    // MARK: - Glossy Implementation
+    
+    public init?(json: JSON) {
+        
+        self.json = json
+        self.id = "id" <~~ json
+        self.name = "name" <~~ json
+        self.text = "text" <~~ json
+        self.authorName = "author_name" <~~ json
+        self.authorId = "author_id" <~~ json
+    }
+    
+    public func toJSON() -> JSON? {
+        return jsonify([
+            "id" ~~> self.id,
+            "name" ~~> self.name,
+            "text" ~~> self.text,
+            "author_name" ~~> self.authorName,
+            "author_id" ~~> self.authorId
+            ])
+    }
+}
+
+extension OfficialPublication {
+    public static func buildQuery(from filtersObject: Any) -> JSON {
+        // Your own implementation on how you want to pass/construct your query from whatever
+        return filtersObject as? JSON ?? JSON()
+    }
+}
+```
+You can now fetch a document by its id:
+```swift
+OfficialPublication.fetch(withId: 12345) { (publication: OfficialPublication?) in
+    guard let publication = publication else {
+        print("NOT FOUND")
+        return
+    }
+    print("Fetched: \(publication)")
+}
+```
+Or build your Elasticsearch query and run a search:
+```swift
+let query: JSON = ["query": ["bool": ["must": ["term": ["name": "quantum entanglement"]]]]] // Your Elasticsearch query
+OfficialPublication.search(withQuery: query)  { (publications: [OfficialPublication]?) in
+}
+```
+
+### And a lot more
+Check out the Swifts docs on the protocols `SearchableList` and `SeachableListEditor`
+```swift
+let listEditor = SearchableListEditor<Author, OfficialPuplication>(withId: someAuthorId, filters: publicationFilters, sortedBy: sortByFieldName, sortAscending: sortIsAscending)
+```
+}
+
+This is a (working) work in progress.
 
 
 

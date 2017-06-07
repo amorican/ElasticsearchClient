@@ -8,6 +8,9 @@
 
 import Foundation
 
+public typealias SearchableListEditCompletion = (_: Any?, _: Error?) -> Void
+public typealias SearchableListEditExecution = (_: SearchableListEditCompletion?) -> Void
+
 public protocol SearchableListEditOption {
     var title: String { get set }
     var isEnabled: Bool { get set }
@@ -15,20 +18,24 @@ public protocol SearchableListEditOption {
     /// When set to `true`, indicates that the option is not made available to the app user (thru the UI).
     var isInternal: Bool { get set }
     
-    var runner: (Void) -> Void { get set }
+    var executer: SearchableListEditExecution { get set }
     
     init()
-    init(title: String, isInternal: Bool, isEnabled: Bool, runner: @escaping (() -> Void))
+    init(title: String, isInternal: Bool, isEnabled: Bool, executer: @escaping SearchableListEditExecution)
 }
 
 extension SearchableListEditOption {
     
-    public init(title: String, isInternal: Bool, isEnabled: Bool, runner: @escaping (() -> Void)) {
+    public init(title: String, isInternal: Bool, isEnabled: Bool, executer: @escaping SearchableListEditExecution) {
         self.init()
         self.title = title
         self.isInternal = isInternal
         self.isEnabled = isEnabled
-        self.runner = runner
+        self.executer = executer
+    }
+    
+    public func run(completion: SearchableListEditCompletion?) {
+        self.executer(completion)
     }
 }
 
@@ -37,12 +44,12 @@ public class BaseEditOption: SearchableListEditOption {
     public var title: String
     public var isEnabled: Bool
     public var isInternal: Bool
-    public var runner: (Void) -> Void
+    public var executer: SearchableListEditExecution
     
     required public init() {
         title = ""
         isEnabled = false
         isInternal = true
-        runner = {}
+        executer = { completion in }
     }
 }

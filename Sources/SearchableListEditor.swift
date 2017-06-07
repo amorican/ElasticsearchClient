@@ -15,10 +15,10 @@ public protocol SearchableListEditable {
     
     /// Id of the `SearchableList` document. Typically this is set at initialization time so that `loadSearchableListAndItems()` can be called.
     var searchableListId: Int { get }
-
+    
     /// The number of Elasticsearch documents fetched so far. Call `loadMoreItems()` to fetch more.
     var fetchedCount: Int { get }
-
+    
     /// The total number of items that the editor will have when all the Elasticsearch documents have been fetched. This total can be more than the count of documents when a SearchableList allows multiple occurrences of the same document
     var totalItemsCount: Int? { get }
     
@@ -341,14 +341,14 @@ extension SearchableListEditor {
         title = "Remove " + title
         
         if !searchableList.canRemoveListItems(listItems) {
-            let runner: (Void) -> Void = {}
-            let option = BaseEditOption(title: title, isInternal: false, isEnabled: false, runner: runner)
+            let executer: SearchableListEditExecution = { remoteCompletion in }
+            let option = BaseEditOption(title: title, isInternal: false, isEnabled: false, executer: executer)
             return option
         }
         
         let removedIndexSet = self.indexSet(ofItems: listItems, inList: self.listItems)
         
-        let runner: (Void) -> Void = {
+        let executer: SearchableListEditExecution = { remoteCompletion in
             var mutatingSearchableList = searchableList
             self.willMoveItemsAtIndexSet?(removedIndexSet)
             let newItems = mutatingSearchableList.removeListItems(listItems, fromItemList: self.listItems)
@@ -357,7 +357,7 @@ extension SearchableListEditor {
             self.didRemoveItemsAtIndexSet?(removedIndexSet)
         }
         
-        let option = BaseEditOption(title: title, isInternal: false, isEnabled: true, runner: runner)
+        let option = BaseEditOption(title: title, isInternal: false, isEnabled: true, executer: executer)
         return option
     }
     
@@ -370,12 +370,12 @@ extension SearchableListEditor {
         title = "Will move " + title
         let movingIndexSet = self.indexSet(ofItems: listItems, inList: self.listItems)
         
-        let runner: (Void) -> Void = {
+        let executer: SearchableListEditExecution = { remoteCompletion in
             self.indexSetOfMovingItems = movingIndexSet
             self.willMoveItemsAtIndexSet?(movingIndexSet)
         }
         
-        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, runner: runner)
+        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
@@ -396,12 +396,12 @@ extension SearchableListEditor {
             title = title + " from position \(position)"
         }
         
-        let runner: (Void) -> Void = {
+        let executer: SearchableListEditExecution = { remoteCompletion in
             self.indexSetOfMovingItems = nil
             self.didCancelMovingItemsFromIndexSet?(indexSet)
         }
         
-        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, runner: runner)
+        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
@@ -419,7 +419,7 @@ extension SearchableListEditor {
         
         title = "Remove " + title + " moving from position \(position)"
         
-        let runner: (Void) -> Void = {
+        let executer: SearchableListEditExecution = { remoteCompletion in
             self.indexSetOfMovingItems = nil
             
             var mutatingSearchableList = searchableList
@@ -429,7 +429,7 @@ extension SearchableListEditor {
             self.didRemoveItemsAtIndexSet?(indexSet)
         }
         
-        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, runner: runner)
+        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
@@ -447,7 +447,7 @@ extension SearchableListEditor {
         
         title = "Finish moving " + title + " from position \(originalPosition) to \(position)"
         
-        let runner: (Void) -> Void = {
+        let executer: SearchableListEditExecution = { remoteCompletion in
             self.indexSetOfMovingItems = nil
             var mutatingSearchableList = searchableList
             let newItems = mutatingSearchableList.moveListItems(listItems, toPosition: position, inItemList: self.listItems)
@@ -458,7 +458,7 @@ extension SearchableListEditor {
             self.didMoveItems?(indexSet, insertIndexSet)
         }
         
-        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, runner: runner)
+        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
