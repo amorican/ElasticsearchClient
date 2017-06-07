@@ -152,7 +152,7 @@ OfficialPublication.search(withQuery: query)  { (publications: [OfficialPublicat
 ### And a lot more
 Check out the Swifts docs on the protocols `SearchableList` and `SeachableListEditor`
 ```swift
-let listEditor = SearchableListEditor<Author, OfficialPuplication>(withId: someAuthorId, filters: publicationFilters, sortedBy: sortByFieldName, sortAscending: sortIsAscending)
+let listEditor = SearchableListEditor<Author, OfficialPublication>(withId: someAuthorId, filters: publicationFilters, sortedBy: sortByFieldName, sortAscending: sortIsAscending)
 ```
 }
 
