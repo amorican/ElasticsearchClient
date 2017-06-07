@@ -5,6 +5,24 @@
 //  Created by Frank Le Grand on 5/18/17.
 //
 //
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+//
 
 import Foundation
 import Gloss
@@ -15,10 +33,10 @@ public protocol SearchableListEditable {
     
     /// Id of the `SearchableList` document. Typically this is set at initialization time so that `loadSearchableListAndItems()` can be called.
     var searchableListId: Int { get }
-    
+
     /// The number of Elasticsearch documents fetched so far. Call `loadMoreItems()` to fetch more.
     var fetchedCount: Int { get }
-    
+
     /// The total number of items that the editor will have when all the Elasticsearch documents have been fetched. This total can be more than the count of documents when a SearchableList allows multiple occurrences of the same document
     var totalItemsCount: Int? { get }
     
@@ -351,6 +369,8 @@ extension SearchableListEditor {
         let executer: SearchableListEditExecution = { remoteCompletion in
             var mutatingSearchableList = searchableList
             self.willMoveItemsAtIndexSet?(removedIndexSet)
+            
+            // TODO: Add completion parameter to mutatingSearchableList.removeListItems which we'll set to remoteCompletion
             let newItems = mutatingSearchableList.removeListItems(listItems, fromItemList: self.listItems)
             self.updateMutatedSeachableList(mutatingSearchableList)
             self.listItems = newItems
