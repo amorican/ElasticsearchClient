@@ -148,7 +148,7 @@ public extension Searchable {
 
 extension Searchable {
     
-    static func search<T : Searchable>(withQuery query: JSON?, completion: ( @escaping (_ asyncHits: AsyncResult<ElasticsearchHits<T>?>) -> Void)) {
+    public static func search<T : Searchable>(withQuery query: JSON?, completion: ( @escaping (_ asyncHits: AsyncResult<ElasticsearchHits<T>?>) -> Void)) {
         let indexName = ElasticsearchClient.indexName(forTypeName: T.typeName)
         if T.typeName.isEmpty || indexName.isEmpty {
             completion(AsyncResult {
@@ -210,11 +210,17 @@ extension Searchable {
         
     }
     
-    func update(fields: JSON) {
+    public func update(completion: ( @escaping () -> Void)) {
+        if let fields = self.toJSON() {
+            self.update(fields: fields, completion: completion)
+        }
+    }
+    
+    public func update(fields: JSON) {
         self.update(fields: fields) {() -> Void in}
     }
     
-    func update(fields: JSON, completion: ( @escaping () -> Void)) {
+    public func update(fields: JSON, completion: ( @escaping () -> Void)) {
         guard let id = self.id else {
             logger.log("\(#function) The update function was called on a searchable with a nil id.")
             completion()

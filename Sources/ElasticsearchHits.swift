@@ -32,7 +32,7 @@ public struct ElasticsearchHits<T : Searchable>: Glossy {
     private var json: JSON?
     
     let maxScore: Float?
-    let total: Int?
+    public let total: Int?
     public let hits: [ElasticsearchHit<T>]?
     
     public init?(json: JSON) {

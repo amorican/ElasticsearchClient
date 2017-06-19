@@ -64,7 +64,7 @@ public class ElasticsearchCall {
     
     // MARK: - Updating Documents
     
-    static func update (typeName: String, documentId: Int, fields: JSON!, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
+    public static func update (typeName: String, documentId: Int, fields: JSON!, completion: @escaping ((AsyncResult<JSON>) -> Void)) {
         var suffix = self.suffix(withTypeName: typeName)
         suffix = suffix.appending("/\(documentId)")
         suffix = suffix.appending("/_update")
