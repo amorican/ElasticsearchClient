@@ -205,30 +205,48 @@ extension Searchable {
 
 extension Searchable {
     
-    static func update(documentId: Int, fields: JSON, completion: ( () -> Void)?) {
-        ElasticsearchCall.update(typeName: self.typeName, documentId: documentId, fields: fields) { asyncResult in completion?() }
+    public typealias SearchableUpdateCompletion = ((_: Any?, _: Error?) -> Void)
+    
+    static func update(documentId: Int, fields: JSON, completion: SearchableUpdateCompletion?) {
+        ElasticsearchCall.update(typeName: self.typeName, documentId: documentId, fields: fields) { asyncResult in
+            do {
+                let results = try asyncResult.resolve()
+                completion?(results, nil)
+            }
+            catch let error {
+                completion?(nil, error)
+            }
+        }
         
     }
     
-    public func update(completion: ( @escaping () -> Void)) {
+    public func update(completion: @escaping SearchableUpdateCompletion) {
         if let fields = self.toJSON() {
             self.update(fields: fields, completion: completion)
         }
     }
     
     public func update(fields: JSON) {
-        self.update(fields: fields) {() -> Void in}
+        self.update(fields: fields) { results, error in }
     }
     
-    public func update(fields: JSON, completion: ( @escaping () -> Void)) {
+    public func update(fields: JSON, completion: @escaping SearchableUpdateCompletion) {
         guard let id = self.id else {
             logger.log("\(#function) The update function was called on a searchable with a nil id.")
-            completion()
+            completion(nil, nil)
             return
         }
         
         let typeName = type(of: self).typeName
-        ElasticsearchCall.update(typeName: typeName, documentId: id, fields: fields) { asyncResult in completion() }
+        ElasticsearchCall.update(typeName: typeName, documentId: id, fields: fields) { asyncResult in
+            do {
+                let results = try asyncResult.resolve()
+                completion(results, nil)
+            }
+            catch let error {
+                completion(nil, error)
+            }
+        }
     }
     
 }

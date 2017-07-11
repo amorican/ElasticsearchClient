@@ -39,6 +39,14 @@ public enum ElasticsearchCallError: Error {
     case invalidQuery(httpStatus: Int, type: String, reason: String, index: String, resourceId: String, resourceType: String)
 }
 
+extension ElasticsearchCallError: LocalizedError {
+    public var errorDescription: String? {
+        return "ElasticsearchCallError \(self)"
+    }
+}
+
+
+
 public class ElasticsearchCall {
     
     // MARK: - Fetching Documents

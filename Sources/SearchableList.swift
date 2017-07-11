@@ -62,18 +62,25 @@ public protocol SearchableList : Searchable, CustomStringConvertible {
      */
     func createListItems<U>(forDocument document: U) -> [SearchableListItem<U>]
     
+    func insert<U: Searchable>(documents: [U], atPosition position: Int, remoteCompletion: SearchableListEditCompletion?) -> [SearchableListItem<U>]
+    
     /**
      - Returns: The Elasticsearch `JSON` query to run on the type `T` to get the `SearchableList`'s items of type `T`.
      */
     func getItemQueryCondition<T: Searchable>(forType type: T.Type) -> JSON?
     
     func canRemoveListItems<U: Searchable>(_: [SearchableListItem<U>]) -> Bool
-    mutating func removeListItems<U: Searchable>(_ listItems: [SearchableListItem<U>], fromItemList originalList: [SearchableListItem<U>]) -> [SearchableListItem<U>]
-    mutating func moveListItems<U: Searchable>(_ listItems: [SearchableListItem<U>], toPosition position: Int, inItemList originalList: [SearchableListItem<U>]) -> [SearchableListItem<U>]
+    func canMoveListItems<U: Searchable>(_: [SearchableListItem<U>]) -> Bool
+    
+    mutating func removeListItems<U: Searchable>(_ listItems: [SearchableListItem<U>], fromItemList originalList: [SearchableListItem<U>], remoteCompletion: SearchableListEditCompletion?) -> [SearchableListItem<U>]
+    mutating func moveListItems<U: Searchable>(_ listItems: [SearchableListItem<U>], toPosition position: Int, inItemList originalList: [SearchableListItem<U>], remoteCompletion: SearchableListEditCompletion?) -> [SearchableListItem<U>]
     
     /** Creates the edit options available on the `SearchableList` for a selection of items
      */
-    static func createEditOptions<T: SearchableList, U: Searchable>(forItems: [SearchableListItem<U>], inItemList originalList: [SearchableListItem<U>], ofSearchableList: T, completion: @escaping (_ mutatedSearchableList: T, _ updatedItems: [SearchableListItem<U>]) -> Void) -> [SearchableListEditOption]
+    static func createEditOptions<T: SearchableList, U: Searchable>(forItems: [SearchableListItem<U>], inItemList originalList: [SearchableListItem<U>], ofSearchableList: T, completion: @escaping (_ updatedItems: [SearchableListItem<U>]) -> Void) -> [SearchableListEditOption]
+    
+    func compareListItemsValues(value1: Any?, value2: Any?) -> ComparisonResult
+//    func compareListItemsValues<C: Comparable>(type: C.Type, value1: Any, value2: Any) -> ComparisonResult
 }
 
 extension SearchableList {
@@ -84,13 +91,31 @@ extension SearchableList {
     
     public func sortedItems<T>(_ listItems: [SearchableListItem<T>], withKey key: String, ascending: Bool) -> [SearchableListItem<T>] {
         let items = listItems.sorted { (item1:SearchableListItem<T>, item2:SearchableListItem<T>) -> Bool in
-            //TODO: Implement other types
-            guard let value1 = item1.attributes[key] as? Int, let value2 = item2.attributes[key] as? Int else {
-                return false
-            }
-            return ascending ? value1 < value2 : value1 > value2
+            
+            let value1 = item1.attributes[key]
+            let value2 = item2.attributes[key]
+            let result = self.compareListItemsValues(value1: value1, value2: value2)
+            return ascending ? result == ComparisonResult.orderedAscending : result != ComparisonResult.orderedAscending
         }
         return items
+    }
+        
+    public func compareListItemsValues<C: Comparable>(type: C.Type, value1: Any?, value2: Any?) -> ComparisonResult {
+        let comparableValue1 = value1 as? C
+        let comparableValue2 = value2 as? C
+        
+        if comparableValue1 == nil && comparableValue2 != nil {
+            return .orderedAscending
+        }
+        if comparableValue2 == nil && comparableValue1 != nil {
+            return .orderedDescending
+        }
+        if comparableValue1 == nil && comparableValue2 == nil {
+            return .orderedSame
+        }
+        
+        return comparableValue1! < comparableValue2! ? .orderedAscending : .orderedDescending
+        
     }
 }
 

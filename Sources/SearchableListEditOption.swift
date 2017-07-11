@@ -29,9 +29,53 @@ import Foundation
 public typealias SearchableListEditCompletion = (_: Any?, _: Error?) -> Void
 public typealias SearchableListEditExecution = (_: SearchableListEditCompletion?) -> Void
 
-public protocol SearchableListEditOption {
+public enum SearchableListEditError: Error {
+    case custom([LocalizedError])
+}
+
+extension SearchableListEditError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .custom(let errors):
+            var errorText = ""
+            for (index, error) in errors.enumerated() {
+                if index > 0 {
+                    errorText.append("\n")
+                }
+                errorText.append(error.localizedDescription)
+            }
+            return errorText
+        }
+    }
+}
+
+
+public class SearchableListEditMonitor {
+    
+    public var editOptions = [SearchableListEditOption]()
+    public var editOptionStateDidChange: ((_: SearchableListEditOption) -> Void)?
+    
+    public func editOption(withTitle title: String, isInternal: Bool, isEnabled: Bool, executer: @escaping SearchableListEditExecution) -> BaseEditOption {
+        return BaseEditOption(title: title, isInternal: isInternal, isEnabled: isEnabled, monitor: self, executer: executer)
+    }
+    
+    func start(_ editOption: SearchableListEditOption) {
+        self.editOptions.append(editOption)
+        self.editOptionStateDidChange?(editOption)
+    }
+    
+    func finish(_ editOption: SearchableListEditOption) {
+        self.editOptionStateDidChange?(editOption)
+    }
+}
+
+public protocol SearchableListEditOption: class {
+    
+    var monitor: SearchableListEditMonitor? { get set }
     var title: String { get set }
     var isEnabled: Bool { get set }
+    var backgroundStateIsOn: Bool { get set }
+    var errors: [Error] { get set }
     
     /// When set to `true`, indicates that the option is not made available to the app user (thru the UI).
     var isInternal: Bool { get set }
@@ -39,10 +83,20 @@ public protocol SearchableListEditOption {
     var executer: SearchableListEditExecution { get set }
     
     init()
-    init(title: String, isInternal: Bool, isEnabled: Bool, executer: @escaping SearchableListEditExecution)
+    init(title: String, isInternal: Bool, isEnabled: Bool, monitor: SearchableListEditMonitor, executer: @escaping SearchableListEditExecution)
 }
 
 extension SearchableListEditOption {
+    
+    public init(title: String, isInternal: Bool, isEnabled: Bool, monitor: SearchableListEditMonitor, executer: @escaping SearchableListEditExecution) {
+        self.init()
+        self.title = title
+        self.isInternal = isInternal
+        self.isEnabled = isEnabled
+        self.monitor = monitor
+        self.executer = executer
+        self.backgroundStateIsOn = false
+    }
     
     public init(title: String, isInternal: Bool, isEnabled: Bool, executer: @escaping SearchableListEditExecution) {
         self.init()
@@ -50,24 +104,47 @@ extension SearchableListEditOption {
         self.isInternal = isInternal
         self.isEnabled = isEnabled
         self.executer = executer
+        self.backgroundStateIsOn = false
     }
     
     public func run(completion: SearchableListEditCompletion?) {
-        self.executer(completion)
+        self.backgroundStateIsOn = true
+        self.monitor?.start(self)
+        self.executer() { results, error in
+            
+            if let theError = error {
+                self.errors.append(theError)
+            }
+            
+            self.backgroundStateIsOn = false
+            self.monitor?.finish(self)
+            completion?(results, error)
+        }
+    }
+    
+    public var hasErrors: Bool {
+        get {
+            return self.errors.count > 0
+        }
     }
 }
 
 public class BaseEditOption: SearchableListEditOption {
     
+    public var monitor: SearchableListEditMonitor?
     public var title: String
+    public var identifier: String?
     public var isEnabled: Bool
     public var isInternal: Bool
     public var executer: SearchableListEditExecution
+    public var backgroundStateIsOn: Bool
+    public var errors = [Error]()
     
     required public init() {
         title = ""
         isEnabled = false
         isInternal = true
+        backgroundStateIsOn = false
         executer = { completion in }
     }
 }

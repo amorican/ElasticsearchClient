@@ -63,7 +63,7 @@ public enum SearchableListEditorError: Error {
     case cannotFetchSearchableList(id: Int)
 }
 
-public class SearchableListEditor<T: SearchableList, U: Searchable>: SearchableListEditable {
+open class SearchableListEditor<T: SearchableList, U: Searchable>: SearchableListEditable {
     
     // MARK: - Public Callbacks
     
@@ -77,10 +77,15 @@ public class SearchableListEditor<T: SearchableList, U: Searchable>: SearchableL
     public var didMoveItems: ((_ from: IndexSet, _ to: IndexSet) -> Void)?
     public var didCancelMovingItemsFromIndexSet: ((_ : IndexSet) -> Void)?
     public var didUpdateItems: ((_: [SearchableListItem<U>], _ at: IndexSet) -> Void)?
+    public var didInsertItemsAtIndexSet: ((_ : IndexSet) -> Void)?
     
     // MARK: - Properties
     
     var indexSetOfMovingItems: IndexSet?
+    
+    public lazy var editMonitor: SearchableListEditMonitor = {
+        return SearchableListEditMonitor()
+    }()
     
     // MARK: Filters & SearchableList(Parent)
     
@@ -93,7 +98,7 @@ public class SearchableListEditor<T: SearchableList, U: Searchable>: SearchableL
     
     // MARK: Results
     
-    public fileprivate(set) var searchableList: T?
+    public var searchableList: T?
     public fileprivate(set) var listItems = [SearchableListItem<U>]()
     public func getListItems() -> [Any] {
         return listItems
@@ -141,7 +146,7 @@ public class SearchableListEditor<T: SearchableList, U: Searchable>: SearchableL
         self.sortAscending = sortAscending
     }
     
-    fileprivate func updateMutatedSeachableList(_ searchableList: T) {
+    public func updateMutatedSeachableList(_ searchableList: T) {
         self.searchableList = searchableList
         self.itemsFetcher?.updateMutatedSearchableList(searchableList)
     }
@@ -323,7 +328,7 @@ extension SearchableListEditor {
             if let finishMoveWithPositionUpdateOption = self.createEditOptionsForUpdatingPositionOfMovingItems(to: 0) {
                 options.append(finishMoveWithPositionUpdateOption)
             }
-            return options
+            return self.options(options, withMonitor: self.editMonitor)
         }
         
         if let removeOption = self.createEditOptions(forRemovingItems: items) {
@@ -335,11 +340,11 @@ extension SearchableListEditor {
         
         
         if let searchableList = self.searchableList {
-            let listOptions = T.createEditOptions(forItems: items, inItemList: self.listItems, ofSearchableList: searchableList) { [weak self] (mutatedSearchableList: T, updatedItems) in
+            let listOptions = T.createEditOptions(forItems: items, inItemList: self.listItems, ofSearchableList: searchableList) { [weak self] (updatedItems) in
                 guard let strongself = self else {
                     return
                 }
-                strongself.updateMutatedSeachableList(mutatedSearchableList)
+//                strongself.updateMutatedSeachableList(mutatedSearchableList)
                 let indexSet = strongself.indexSet(ofItems: updatedItems, inList: strongself.listItems)
                 self?.didUpdateItems?(updatedItems, indexSet)
             }
@@ -347,10 +352,33 @@ extension SearchableListEditor {
             options.append(contentsOf: listOptions)
         }
         
-        return options
+        return self.options(options, withMonitor: self.editMonitor)
     }
     
-    func createEditOptions(forRemovingItems listItems: [SearchableListItem<U>]) -> SearchableListEditOption? {
+    public func createEditOptions(forAddingDocuments documents: [U], atPosition position: Int) -> SearchableListEditOption? {
+        let title = "FIXME - Add documents"
+        let executer: SearchableListEditExecution = { remoteCompletion in
+            let newItems = self.searchableList?.insert(documents: documents, atPosition: position, remoteCompletion: remoteCompletion) ?? [SearchableListItem<U>]()
+            var insertPosition = position
+            if insertPosition < 0 {
+                insertPosition = 0
+            }
+            if insertPosition > self.listItems.count {
+                insertPosition = self.listItems.count
+            }
+            self.listItems.insert(contentsOf: newItems, at: insertPosition)
+
+            
+            let insertIndexSet = self.indexSet(ofItems: newItems, inList: self.listItems)
+            self.didInsertItemsAtIndexSet?(insertIndexSet)
+        }
+        
+        let option = self.editMonitor.editOption(withTitle: title, isInternal: false, isEnabled: true, executer: executer)
+//        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
+        return option
+    }
+    
+    public func createEditOptions(forRemovingItems listItems: [SearchableListItem<U>]) -> SearchableListEditOption? {
         guard let searchableList = self.searchableList, listItems.count > 0 else {
             return nil
         }
@@ -360,7 +388,8 @@ extension SearchableListEditor {
         
         if !searchableList.canRemoveListItems(listItems) {
             let executer: SearchableListEditExecution = { remoteCompletion in }
-            let option = BaseEditOption(title: title, isInternal: false, isEnabled: false, executer: executer)
+            let option = self.editMonitor.editOption(withTitle: title, isInternal: false, isEnabled: true, executer: executer)
+//            let option = BaseEditOption(title: title, isInternal: false, isEnabled: false, executer: executer)
             return option
         }
         
@@ -371,20 +400,23 @@ extension SearchableListEditor {
             self.willMoveItemsAtIndexSet?(removedIndexSet)
             
             // TODO: Add completion parameter to mutatingSearchableList.removeListItems which we'll set to remoteCompletion
-            let newItems = mutatingSearchableList.removeListItems(listItems, fromItemList: self.listItems)
+            let newItems = mutatingSearchableList.removeListItems(listItems, fromItemList: self.listItems, remoteCompletion: remoteCompletion)
             self.updateMutatedSeachableList(mutatingSearchableList)
             self.listItems = newItems
             self.didRemoveItemsAtIndexSet?(removedIndexSet)
         }
         
-        let option = BaseEditOption(title: title, isInternal: false, isEnabled: true, executer: executer)
+        let option = self.editMonitor.editOption(withTitle: title, isInternal: false, isEnabled: true, executer: executer)
+//      let option = BaseEditOption(title: title, isInternal: false, isEnabled: true, executer: executer)
         return option
     }
     
-    func createEditOptions(forBeginMovingItems listItems: [SearchableListItem<U>]) -> SearchableListEditOption? {
-        if listItems.count == 0 {
+    public func createEditOptions(forBeginMovingItems listItems: [SearchableListItem<U>]) -> SearchableListEditOption? {
+        if !(self.searchableList?.canMoveListItems(listItems) ?? false) || listItems.count == 0 {
             return nil
         }
+        
+        
         
         var title = self.titleForListItems(listItems)
         title = "Will move " + title
@@ -395,11 +427,12 @@ extension SearchableListEditor {
             self.willMoveItemsAtIndexSet?(movingIndexSet)
         }
         
-        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
+        let option = self.editMonitor.editOption(withTitle: title, isInternal: true, isEnabled: true, executer: executer)
+//        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
-    func createEditOptionsForCancelingMovingItems() -> SearchableListEditOption? {
+    public func createEditOptionsForCancelingMovingItems() -> SearchableListEditOption? {
         guard let indexSet = self.indexSetOfMovingItems, let position = indexSet.first, indexSet.count > 0 else {
             return nil
         }
@@ -421,11 +454,12 @@ extension SearchableListEditor {
             self.didCancelMovingItemsFromIndexSet?(indexSet)
         }
         
-        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
+        let option = self.editMonitor.editOption(withTitle: title, isInternal: true, isEnabled: true, executer: executer)
+//        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
-    func createEditOptionsForRemovingMovingItems() -> SearchableListEditOption? {
+    public func createEditOptionsForRemovingMovingItems() -> SearchableListEditOption? {
         guard let searchableList = self.searchableList, let indexSet = self.indexSetOfMovingItems, let position = indexSet.first, indexSet.count > 0 else {
             return nil
         }
@@ -443,17 +477,18 @@ extension SearchableListEditor {
             self.indexSetOfMovingItems = nil
             
             var mutatingSearchableList = searchableList
-            let newItems = mutatingSearchableList.removeListItems(listItems, fromItemList: self.listItems)
+            let newItems = mutatingSearchableList.removeListItems(listItems, fromItemList: self.listItems, remoteCompletion: remoteCompletion)
             self.updateMutatedSeachableList(mutatingSearchableList)
             self.listItems = newItems
             self.didRemoveItemsAtIndexSet?(indexSet)
         }
         
-        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
+        let option = self.editMonitor.editOption(withTitle: title, isInternal: false, isEnabled: true, executer: executer)
+//        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
-    func createEditOptionsForUpdatingPositionOfMovingItems(to position: Int) -> SearchableListEditOption? {
+    public func createEditOptionsForUpdatingPositionOfMovingItems(to position: Int) -> SearchableListEditOption? {
         guard let searchableList = self.searchableList, let indexSet = self.indexSetOfMovingItems, let originalPosition = indexSet.first, indexSet.count > 0 else {
             return nil
         }
@@ -465,12 +500,12 @@ extension SearchableListEditor {
         }
         var title = self.titleForListItems(listItems)
         
-        title = "Finish moving " + title + " from position \(originalPosition) to \(position)"
+        title = "Move " + title + " from position \(originalPosition) to \(position)"
         
         let executer: SearchableListEditExecution = { remoteCompletion in
             self.indexSetOfMovingItems = nil
             var mutatingSearchableList = searchableList
-            let newItems = mutatingSearchableList.moveListItems(listItems, toPosition: position, inItemList: self.listItems)
+            let newItems = mutatingSearchableList.moveListItems(listItems, toPosition: position, inItemList: self.listItems, remoteCompletion: remoteCompletion)
             self.updateMutatedSeachableList(mutatingSearchableList)
             self.listItems = newItems
             
@@ -478,16 +513,39 @@ extension SearchableListEditor {
             self.didMoveItems?(indexSet, insertIndexSet)
         }
         
-        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
+        let option = self.editMonitor.editOption(withTitle: title, isInternal: false, isEnabled: true, executer: executer)
+//        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
-    private func indexSet<U: Equatable>(ofItems items: [U], inList list: [U]) -> IndexSet {
+    public func indexSet<U: Equatable>(ofItems items: [U], inList list: [U]) -> IndexSet {
         return self.searchableList?.indexSet(ofItems: items, inList: list) ?? IndexSet()
+    }
+    
+    public func listItems(atIndexSet indexSet: IndexSet) -> [SearchableListItem<U>] {
+        var listItems = [SearchableListItem<U>]()
+        for index in indexSet {
+            if index < 0 || index >= self.listItems.count {
+                continue
+            }
+            
+            listItems.append(self.listItems[index])
+        }
+        return listItems
     }
     
     private func titleForListItems(_ items: [SearchableListItem<U>]) -> String {
         return self.searchableList?.titleForListItems(items) ?? ""
+    }
+    
+    public func options(_ options: [SearchableListEditOption], withMonitor monitor: SearchableListEditMonitor) -> [SearchableListEditOption] {
+        var optionsWithMonitor = [SearchableListEditOption]()
+        for option in options {
+            var optionWithMonitor = option
+            optionWithMonitor.monitor = monitor
+            optionsWithMonitor.append(optionWithMonitor)
+        }
+        return optionsWithMonitor
     }
 }
 
