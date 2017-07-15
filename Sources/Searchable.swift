@@ -27,6 +27,18 @@
 import Foundation
 import Gloss
 
+extension DateFormatter {
+    
+    public static let searchableDateFormatter: DateFormatter = createSearchableDateFormatter()
+    
+    static func createSearchableDateFormatter() -> DateFormatter {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        dateFormatter.timeZone = NSTimeZone.local
+        return dateFormatter
+    }
+}
+
 public protocol Searchable : Glossy {
     
     /// Elasticsearch Type name

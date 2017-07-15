@@ -52,6 +52,9 @@ public class SearchableListFetcher<T: SearchableList, U: Searchable> {
         }
     }
     
+    public var shouldOnlyFetchDocumentsFromSearchableList = true
+
+    
     fileprivate(set) var searchableList: T
     fileprivate(set) var filters: SearchableFilterSet
     fileprivate(set) var sortFieldName: String?
@@ -118,7 +121,9 @@ public class SearchableListFetcher<T: SearchableList, U: Searchable> {
     
     fileprivate func createFetcher() -> ElasticsearchFetcher<U> {
         let filters = self.filters
-        filters.setListDocument(self.searchableList)
+        if self.shouldOnlyFetchDocumentsFromSearchableList {
+            filters.setListDocument(self.searchableList)
+        }
         
         let fetcher = ElasticsearchFetcher<U>(withFilters: filters, sortedBy: self.sortFieldName, sortAscending: self.sortAscending)
         fetcher.didFetchDocumentsClosure = { [weak self] documents in

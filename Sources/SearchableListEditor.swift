@@ -90,7 +90,7 @@ open class SearchableListEditor<T: SearchableList, U: Searchable>: SearchableLis
     // MARK: Filters & SearchableList(Parent)
     
     public let searchableListId: Int
-    fileprivate let itemsFilters: SearchableFilterSet
+    fileprivate var itemsFilters: SearchableFilterSet
     fileprivate(set) var sortFieldName: String?
     fileprivate(set) var sortAscending = true
     
@@ -99,6 +99,7 @@ open class SearchableListEditor<T: SearchableList, U: Searchable>: SearchableLis
     // MARK: Results
     
     public var searchableList: T?
+    public var shouldOnlyFetchDocumentsFromSearchableList = true
     public fileprivate(set) var listItems = [SearchableListItem<U>]()
     public func getListItems() -> [Any] {
         return listItems
@@ -130,7 +131,7 @@ open class SearchableListEditor<T: SearchableList, U: Searchable>: SearchableLis
     
     public var totalItemsCount: Int? {
         get {
-            if let count = self.searchableList?.listItemsCount {
+            if self.shouldOnlyFetchDocumentsFromSearchableList, let count = self.searchableList?.listItemsCount {
                 return count
             }
             return self.queryCount
@@ -161,11 +162,17 @@ open class SearchableListEditor<T: SearchableList, U: Searchable>: SearchableLis
         self.machine.state = .fetchingDocuments
     }
     
+    public func loadItemsWithFilters(_ filters: SearchableFilterSet) {
+        self.itemsFilters = filters
+        self.machine.state = .ready
+        self.machine.state = .fetchingDocuments
+    }
+    
     public func sortItems(byFieldName sortFieldName: String, ascending: Bool) {
         self.sortFieldName = sortFieldName
         self.sortAscending = ascending
         
-        if self.itemsFetcher?.isDone == true && self.searchableList?.localSortIsRequired(forFieldName: sortFieldName) ?? false,
+        if (!self.shouldOnlyFetchDocumentsFromSearchableList || self.itemsFetcher?.isDone == true) && self.searchableList?.localSortIsRequired(forFieldName: sortFieldName) ?? false,
             let sortedItems = searchableList?.sortedItems(self.listItems, withKey: sortFieldName, ascending: ascending) {
             self.handleAllItemsFetched(items: sortedItems)
         }
@@ -174,6 +181,13 @@ open class SearchableListEditor<T: SearchableList, U: Searchable>: SearchableLis
             self.machine.state = .fetchingDocuments
         }
     }
+    
+//    public func canSortByFieldName(_ sortFieldName: String) -> Bool {
+//        if self.searchableList?.localSortIsRequired(forFieldName: sortFieldName) ?? false && !self.shouldOnlyFetchDocumentsFromSearchableList {
+//            return false
+//        }
+//        return true
+//    }
 }
 
 // MARK: - SimpleStateMachine Delegate Implementation
@@ -255,7 +269,8 @@ extension SearchableListEditor {
         let localSortIsRequired = self.sortFieldName != nil && searchableList.localSortIsRequired(forFieldName: self.sortFieldName!)
         let sortFieldName = !localSortIsRequired ? self.sortFieldName : nil
         let itemsFetcher = SearchableListFetcher<T, U>(withSearchableList: searchableList, filters: filters, sortedBy: sortFieldName, sortAscending: self.sortAscending)
-        itemsFetcher.shouldFetchAllDocuments = searchableList.editorRequiresAllDocuments || localSortIsRequired
+        itemsFetcher.shouldOnlyFetchDocumentsFromSearchableList = self.shouldOnlyFetchDocumentsFromSearchableList
+        itemsFetcher.shouldFetchAllDocuments = itemsFetcher.shouldOnlyFetchDocumentsFromSearchableList && (searchableList.editorRequiresAllDocuments || localSortIsRequired)
         
         itemsFetcher.didFetchDocumentsClosure = { [weak self] listItems in
             guard let strongSelf = self else {
@@ -265,7 +280,7 @@ extension SearchableListEditor {
             logger.log("\(searchableList) Did fetch \(listItems.count) list items. List has \(totalCount) items, \(strongSelf.fetchedCount) fetched so far.")
             strongSelf.machine.state = .partialDocumentsFetched(listItems)
             
-            if itemsFetcher.shouldFetchAllDocuments && !itemsFetcher.isDone {
+            if itemsFetcher.shouldOnlyFetchDocumentsFromSearchableList && itemsFetcher.shouldFetchAllDocuments && !itemsFetcher.isDone {
                 strongSelf.machine.state = .fetchingDocuments
             }
         }
@@ -374,12 +389,11 @@ extension SearchableListEditor {
         }
         
         let option = self.editMonitor.editOption(withTitle: title, isInternal: false, isEnabled: true, executer: executer)
-//        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
     public func createEditOptions(forRemovingItems listItems: [SearchableListItem<U>]) -> SearchableListEditOption? {
-        guard let searchableList = self.searchableList, listItems.count > 0 else {
+        guard self.shouldOnlyFetchDocumentsFromSearchableList, let searchableList = self.searchableList, listItems.count > 0 else {
             return nil
         }
         
@@ -389,7 +403,6 @@ extension SearchableListEditor {
         if !searchableList.canRemoveListItems(listItems) {
             let executer: SearchableListEditExecution = { remoteCompletion in }
             let option = self.editMonitor.editOption(withTitle: title, isInternal: false, isEnabled: true, executer: executer)
-//            let option = BaseEditOption(title: title, isInternal: false, isEnabled: false, executer: executer)
             return option
         }
         
@@ -399,7 +412,6 @@ extension SearchableListEditor {
             var mutatingSearchableList = searchableList
             self.willMoveItemsAtIndexSet?(removedIndexSet)
             
-            // TODO: Add completion parameter to mutatingSearchableList.removeListItems which we'll set to remoteCompletion
             let newItems = mutatingSearchableList.removeListItems(listItems, fromItemList: self.listItems, remoteCompletion: remoteCompletion)
             self.updateMutatedSeachableList(mutatingSearchableList)
             self.listItems = newItems
@@ -407,12 +419,11 @@ extension SearchableListEditor {
         }
         
         let option = self.editMonitor.editOption(withTitle: title, isInternal: false, isEnabled: true, executer: executer)
-//      let option = BaseEditOption(title: title, isInternal: false, isEnabled: true, executer: executer)
         return option
     }
     
     public func createEditOptions(forBeginMovingItems listItems: [SearchableListItem<U>]) -> SearchableListEditOption? {
-        if !(self.searchableList?.canMoveListItems(listItems) ?? false) || listItems.count == 0 {
+        if !(self.searchableList?.canMoveListItems(listItems) ?? false) || listItems.count == 0 || !self.shouldOnlyFetchDocumentsFromSearchableList {
             return nil
         }
         
@@ -428,7 +439,6 @@ extension SearchableListEditor {
         }
         
         let option = self.editMonitor.editOption(withTitle: title, isInternal: true, isEnabled: true, executer: executer)
-//        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
@@ -455,7 +465,6 @@ extension SearchableListEditor {
         }
         
         let option = self.editMonitor.editOption(withTitle: title, isInternal: true, isEnabled: true, executer: executer)
-//        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
@@ -484,7 +493,6 @@ extension SearchableListEditor {
         }
         
         let option = self.editMonitor.editOption(withTitle: title, isInternal: false, isEnabled: true, executer: executer)
-//        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
@@ -514,7 +522,6 @@ extension SearchableListEditor {
         }
         
         let option = self.editMonitor.editOption(withTitle: title, isInternal: false, isEnabled: true, executer: executer)
-//        let option = BaseEditOption(title: title, isInternal: true, isEnabled: true, executer: executer)
         return option
     }
     
@@ -539,13 +546,10 @@ extension SearchableListEditor {
     }
     
     public func options(_ options: [SearchableListEditOption], withMonitor monitor: SearchableListEditMonitor) -> [SearchableListEditOption] {
-        var optionsWithMonitor = [SearchableListEditOption]()
         for option in options {
-            var optionWithMonitor = option
-            optionWithMonitor.monitor = monitor
-            optionsWithMonitor.append(optionWithMonitor)
+            option.monitor = monitor
         }
-        return optionsWithMonitor
+        return options
     }
 }
 
